@@ -33,4 +33,6 @@ Thumbs.db
 # Download / temp artifacts (runtime)
 backend/temp/
 backend/downloads/
+.tmp_downloads/
+**/.tmp_downloads/
 *.tmp
