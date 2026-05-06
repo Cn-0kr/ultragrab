@@ -182,7 +182,32 @@ free-download-vediowebsite/
 - 用户系统 / 支付：前端预留入口，接入时仅替换登录态与支付 webhook。
 - 持久化：内存 task store 抽象成接口，后续可替换 Redis。
 - 进度推送：当前用轮询，将来可升级 SSE 或 WebSocket。
-- 登录态/Cookie：后续管理面可暴露 `cookies-from-browser` 或上传 cookies.txt，MVP 阶段不做。
+- 登录态/Cookie：已支持通过环境变量 `YTDLP_COOKIE_FILE` 传入 Netscape cookies（解析与字幕下载共用）；上传 cookies 的管理 UI 仍可作为后续增强。
+
+## 八点五、AI 视频摘要（DeepSeek，扩展路由）
+
+> 实现代码见 `backend/app/ai_*.py`、`subtitle_extractor.py`、`deepseek_client.py`；不影响原有 `/api/parse` 与下载链路。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/transcript` | `task_id` + 可选 `subtitle_langs`，拉取平台字幕（yt-dlp 仅写字幕）并返回带时间戳 cues |
+| POST | `/api/summarize` | `text/event-stream`，DeepSeek 流式生成中文摘要 |
+| POST | `/api/mindmap` | JSON，返回 `mermaid` 字符串供前端渲染 |
+| POST | `/api/chat` | `text/event-stream`，基于字幕上下文的多轮问答 |
+
+环境变量：`DEEPSEEK_API_KEY`（未配置则 summarize/mindmap/chat 返回 503；`/api/transcript` 仍可不依赖 AI）、可选 `DEEPSEEK_API_BASE`、`DEEPSEEK_MODEL`、`AI_MAX_TRANSCRIPT_CHARS`、`YTDLP_COOKIE_FILE`（见下）。
+
+### 解析阶段字幕发现（yt-dlp）
+
+- 解析 URL 时启用 `listsubtitles: True`，否则 yt-dlp 默认**不调用**各站点 extractor 的字幕钩子，`info["subtitles"]` 长期为空（表现为前端「无字幕语言」）。
+- 汇总字幕列表时 **忽略 `danmaku`**：其为弹幕 XML，非 CC/SRT 管线目标，避免误当作可选字幕语言。
+
+### 已知限制（尤其哔哩哔哩）
+
+- **不是所有稿件都必须 Cookie**：若 B 站 Player API 在未登录下仍返回非空 `subtitle.subtitles` 且未标记需登录字幕，则匿名 yt-dlp 即可拉取 CC。
+- **部分稿件等价「必须登录态」**：接口返回 `need_login_subtitle` 时，匿名下列表常为 `[]`，与浏览器登录后能看到 UP 上传字幕的现象不一致；此时应在服务端配置 `YTDLP_COOKIE_FILE`（浏览器导出 Netscape cookies.txt），**重启后重新解析该链接**，使 yt-dlp 与解析/字幕下载共用 Cookie。
+- **验证方式**：本地执行 `yt-dlp --list-subs "<BV URL>"`，若除 `danmaku` 外仍无任何语言，则本站 AI/字幕链路同样无法在未登录下取得 CC。
+- 抖音等非 yt-dlp 分支不在此扩展讨论范围内；无平台字幕轨道则 AI 功能不可用。
 
 ## 九、维护节奏
 

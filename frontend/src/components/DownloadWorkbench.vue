@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import Spinner from './Spinner.vue'
+import VideoSummary from './VideoSummary.vue'
 import { api, ApiError, fileUrl } from '../api/client'
 import type {
   DownloadMode,
@@ -501,8 +502,12 @@ const hasEntries = computed(() => entries.value.length > 0)
               </div>
 
               <p v-if="entry.parse.subtitles.length" class="text-xs text-ink-mute">
-                检测到 {{ entry.parse.subtitles.length }} 种字幕（字幕勾选 + 翻译功能在 Pro 会员中开放）
+                检测到 {{ entry.parse.subtitles.length }} 种字幕；可用下方「AI 学习助手」做摘要与导图。批量下载字幕合并仍为后续会员能力。
               </p>
+              <VideoSummary
+                :task-id="entry.parse.task_id"
+                :subtitle-options="entry.parse.subtitles"
+              />
             </template>
           </div>
         </div>

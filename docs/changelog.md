@@ -46,7 +46,7 @@
 - 不支持需要登录态的内容（YouTube 会员视频、B 站大会员独享、Twitter 私密帖等）。
 - 直链 302 模式对强 Referer 平台（B 站等）可能失败，前端不会自动回退，由用户切换到 proxy。
 - ffmpeg 缺失会自动降级为 `best` 单文件模式，最高画质合并不可用。
-- 字幕语言下载功能（前端勾选 + 后端 `subtitle_langs`）已通水，但 UI 还停留在文本提示阶段，待阶段 5 接入勾选 UI。
+- 工作台已支持字幕语言选择（含 AI 面板）；服务端下载仍可传 `subtitle_langs`。
 - 付费通道（Pro 卡）仅占位，实际支付能力待接入。
 - 移动端粘贴剪贴板识别、吸底下载条等优化排在阶段 5。
 
@@ -54,3 +54,24 @@
 
 - 阶段 4：Video School 视觉精修 + 平台 logo 墙 + 限时促销横幅 + 入场动画。
 - 阶段 5：字幕勾选 UI、`localStorage` 历史、SSE 进度推送、移动端粘贴优化、Pro 占位入口。
+
+---
+
+## 0.2.0 — 2026-05-06（AI 学习助手 + B 站字幕说明）
+
+### 新增
+
+- 后端：`/api/transcript`、`/api/summarize`（SSE）、`/api/mindmap`、`/api/chat`（SSE）；DeepSeek 客户端与字幕缓存；`subtitle_extractor` 仅拉字幕不写视频。
+- 解析阶段 `listsubtitles`，修正 yt-dlp 默认不填充 `info["subtitles"]` 导致前端看不到字幕语言的问题。
+- 可选环境变量 `YTDLP_COOKIE_FILE`，解析/服务端下载/ AI 拉字幕共用，用于 B 站等「接口要求登录才返回字幕列表」的稿件。
+- 前端：`VideoSummary.vue`（摘要 / 字幕 / 导图 / 问答）、`videoAi.ts`；工作台挂载 AI 面板；依赖 `marked`、`mermaid`。
+
+### 文档
+
+- `README.md`、`docs/design.md` 增补 AI 配置与 **B 站 `need_login_subtitle` / Cookie** 说明；恢复并扩展 `backend/.env.example`。
+
+### 已知问题（持续跟踪）
+
+- **B 站部分视频**：网页登录可见字幕，但匿名 Player API 字幕列表为空；必须配置 `YTDLP_COOKIE_FILE`（已登录账号导出）后重新解析，详见设计文档「八点五」。
+- **抖音等**：若无 yt-dlp 可识别的字幕轨道，AI 功能不可用（首期不接 ASR）。
+- 个别 BV 在不同出口 IP/风控下行为可能不一致；以 `yt-dlp --list-subs` 实测为准。

@@ -9,12 +9,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(_ENV_FILE)
 except Exception:
     pass
 
@@ -69,6 +70,11 @@ class Settings:
                 "http://127.0.0.1:5173",
             ],
         )
+    )
+
+    #: Netscape-format cookies.txt passed to yt-dlp (helps Bilibili CC when API requires login).
+    ytdlp_cookie_file: Optional[str] = field(
+        default_factory=lambda: (os.getenv("YTDLP_COOKIE_FILE") or "").strip() or None
     )
 
     def ensure_dirs(self) -> None:

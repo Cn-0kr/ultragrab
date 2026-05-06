@@ -28,6 +28,7 @@ from .schemas import (
     SubtitleLanguage,
     VideoMetadata,
 )
+from .settings import settings
 from .task_store import FormatRecord, TaskRecord, task_store
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,17 @@ class ClientError(Exception):
         self.payload = ErrorPayload(code=code, message=message, hint=hint)
 
 
+def _yt_cookie_opts() -> Dict[str, Any]:
+    raw = settings.ytdlp_cookie_file
+    if not raw:
+        return {}
+    path = Path(raw).expanduser().resolve()
+    if not path.is_file():
+        logger.warning("YTDLP_COOKIE_FILE is set but not a readable file: %s", path)
+        return {}
+    return {"cookiefile": str(path)}
+
+
 def _translate_ytdlp_error(err: Exception) -> ErrorPayload:
     message = str(err)
     lowered = message.lower()
@@ -103,6 +115,15 @@ def _translate_ytdlp_error(err: Exception) -> ErrorPayload:
             code="need_login",
             message="This video requires the viewer to be signed in.",
             hint="MVP does not support authenticated downloads.",
+        )
+    if "subtitles are only available when logged in" in lowered:
+        return ErrorPayload(
+            code="subtitle_need_login",
+            message="该平台字幕接口要求登录态才能返回字幕列表。",
+            hint=(
+                "导出浏览器 cookies.txt（Netscape 格式），在 backend/.env 设置 "
+                "YTDLP_COOKIE_FILE=绝对路径，重启后端后再解析。"
+            ),
         )
     if "http error 403" in lowered or "expired" in lowered or "url has been expired" in lowered:
         return ErrorPayload(
@@ -154,6 +175,10 @@ def parse_url(url: str) -> Tuple[TaskRecord, ParseResult]:
         "noprogress": True,
         "nocheckcertificate": False,
         "extract_flat": False,
+        # Without this, yt-dlp skips extractor subtitle hooks — info["subtitles"] stays empty
+        # even when the site has CC (notably Bilibili when API returns tracks).
+        "listsubtitles": True,
+        **_yt_cookie_opts(),
     }
 
     try:
@@ -337,6 +362,9 @@ def _mark_recommended(options: List[FormatOption]) -> None:
 def _collect_subtitles(info: Dict[str, Any]) -> List[SubtitleLanguage]:
     subs: Dict[str, SubtitleLanguage] = {}
     for code, entries in (info.get("subtitles") or {}).items():
+        # Bilibili exposes bullet comments as pseudo-track "danmaku" (XML); not usable as SRT/CC here.
+        if code == "danmaku":
+            continue
         name = None
         if entries and isinstance(entries, list):
             name = entries[0].get("name")
@@ -471,6 +499,7 @@ def server_download(
         "nocheckcertificate": False,
         "restrictfilenames": True,
         "progress_hooks": [_make_progress_hook(task_id)],
+        **_yt_cookie_opts(),
     }
 
     if has_ffmpeg():
@@ -656,6 +685,7 @@ def _refresh_direct_url(record: TaskRecord, format_id: str) -> FormatRecord:
         "no_warnings": True,
         "skip_download": True,
         "format": format_id,
+        **_yt_cookie_opts(),
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:

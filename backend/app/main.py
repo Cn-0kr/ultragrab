@@ -13,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .routes import router as api_router
 from .settings import settings
+from .routes import router as api_router
+from .ai_routes import router as ai_router
 from .task_store import task_store
 from .ytdlp_service import sweep_orphan_downloads
 
@@ -89,6 +90,7 @@ async def handle_validation_exc(_, exc: RequestValidationError) -> JSONResponse:
 
 
 app.include_router(api_router)
+app.include_router(ai_router)
 
 
 @app.get("/")
