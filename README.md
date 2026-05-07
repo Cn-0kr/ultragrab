@@ -56,9 +56,21 @@ npm run dev
 
 ### AI 学习助手（可选）
 
-依赖 **平台字幕** + **DeepSeek API**。在 `backend/.env` 中配置 `DEEPSEEK_API_KEY`（可参考 `backend/.env.example`）。前端解析任务成功后，工作台展开「AI 学习助手」可使用字幕列表、摘要（SSE）、思维导图（Mermaid）、基于字幕的问答。
+依赖 **DeepSeek API**。在 `backend/.env` 中配置 `DEEPSEEK_API_KEY`（可参考 `backend/.env.example`）。前端解析任务成功后，工作台展开「AI 学习助手」可使用字幕列表、摘要（SSE）、思维导图（Mermaid）、基于字幕的问答。
 
-**已知问题（B 站）：** 许多 UP 主上传的字幕仅在 **登录态** 下由接口返回；匿名解析时字幕列表可能为空，导致 AI 区无字幕可选。若浏览器登录同一账号能看到字幕，请将 **Netscape 格式** 的 `cookies.txt` 放到本机安全路径，并设置 `YTDLP_COOKIE_FILE` 指向该文件，**重启后端后重新粘贴解析**。也可用 `yt-dlp --list-subs "视频 URL"` 自检：除 `danmaku` 外若仍无语言，则当前网络/登录条件下无法走官方字幕接口。
+**字幕获取策略：**
+
+1. **平台字幕（优先）：** 通过 yt-dlp 或 B 站专用 API（WBI 签名 + 多源 Fallback）获取字幕。
+2. **ASR 语音转写（自动降级，0.4.0+）：** 当平台字幕不可用时，自动提取音频并调用 SiliconFlow ASR 生成文字稿。需在 `backend/.env` 中配置 `SILICONFLOW_API_KEY`。
+
+```env
+# ASR 语音转写（可选，推荐配置）
+SILICONFLOW_API_KEY=sk-xxxxxxx          # SiliconFlow API 密钥（需完成实名认证）
+SILICONFLOW_API_BASE=https://api.siliconflow.cn  # 默认值，国内用 .cn
+SILICONFLOW_ASR_MODEL=FunAudioLLM/SenseVoiceSmall  # 免费模型
+```
+
+**B 站字幕策略（0.3.0+）：** 解析 Bilibili 链接时，后端通过 **WBI 签名 + 多源 Fallback**（View API → Player WBI API → AI 摘要 API）尝试获取字幕，多数公开稿件匿名即可命中。`need_login_subtitle=True` 的稿件需配置 `YTDLP_COOKIE_FILE`（Netscape cookies.txt）或依赖 ASR 转写降级。
 
 ## 合规声明
 

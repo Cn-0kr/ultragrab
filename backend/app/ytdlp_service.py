@@ -20,7 +20,7 @@ import httpx
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 
-from . import douyin_service
+from . import bilibili_subs, douyin_service
 from .schemas import (
     ErrorPayload,
     FormatOption,
@@ -211,6 +211,9 @@ def parse_url(url: str) -> Tuple[TaskRecord, ParseResult]:
     formats, format_records = _collect_formats(info)
     subtitles = _collect_subtitles(info)
 
+    if (info.get("extractor_key") or "").lower().startswith("bilibili"):
+        subtitles = _merge_bilibili_ai_subs(subtitles, info.get("webpage_url") or url)
+
     record.metadata = metadata
     record.formats = format_records
     record.subtitles = subtitles
@@ -377,6 +380,32 @@ def _collect_subtitles(info: Dict[str, Any]) -> List[SubtitleLanguage]:
             name = entries[0].get("name")
         subs[code] = SubtitleLanguage(code=code, name=name, is_automatic=True)
     return sorted(subs.values(), key=lambda s: (s.is_automatic, s.code))
+
+
+def _merge_bilibili_ai_subs(
+    existing: List[SubtitleLanguage], webpage_url: str
+) -> List[SubtitleLanguage]:
+    """Probe Bilibili Player API for AI subtitle tracks and merge (deduplicated) into list.
+
+    Non-AI tracks already present take priority (e.g. zh-Hans uploaded by UP wins over ai-zh).
+    Failures are swallowed — this must never break the parse pipeline.
+    """
+    try:
+        ai_langs = bilibili_subs.probe(webpage_url)
+    except Exception as exc:
+        logger.debug("_merge_bilibili_ai_subs: probe error ignored: %s", exc)
+        return existing
+
+    if not ai_langs:
+        return existing
+
+    existing_codes = {s.code for s in existing}
+    merged = list(existing)
+    for lang in ai_langs:
+        if lang.code not in existing_codes:
+            merged.append(lang)
+            existing_codes.add(lang.code)
+    return sorted(merged, key=lambda s: (s.is_automatic, s.code))
 
 
 # ---------------------------------------------------------------------------

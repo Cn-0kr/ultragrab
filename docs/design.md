@@ -54,6 +54,13 @@ free-download-vediowebsite/
 │     ├─ main.py               # FastAPI 入口 + CORS + 生命周期
 │     ├─ routes.py             # 所有 HTTP 路由
 │     ├─ ytdlp_service.py      # yt-dlp 封装：解析/下载/直链
+│     ├─ bilibili_subs.py     # B 站字幕：WBI 签名 + 多源 Fallback
+│     ├─ asr_service.py       # ASR 语音转写：yt-dlp 提取音频 → SiliconFlow 转写 → cue 构建
+│     ├─ ai_config.py         # AI 功能配置（DeepSeek + SiliconFlow）
+│     ├─ ai_routes.py         # AI 路由：transcript / summarize / mindmap / chat
+│     ├─ subtitle_extractor.py # 字幕拉取与 SRT 解析
+│     ├─ srt_parser.py        # SRT 解析器 + TranscriptCue 数据类
+│     ├─ deepseek_client.py   # DeepSeek API 客户端
 │     ├─ task_store.py         # 内存任务状态
 │     ├─ settings.py           # 配置：超时/并发/临时目录
 │     └─ schemas.py            # Pydantic 模型
@@ -202,12 +209,72 @@ free-download-vediowebsite/
 - 解析 URL 时启用 `listsubtitles: True`，否则 yt-dlp 默认**不调用**各站点 extractor 的字幕钩子，`info["subtitles"]` 长期为空（表现为前端「无字幕语言」）。
 - 汇总字幕列表时 **忽略 `danmaku`**：其为弹幕 XML，非 CC/SRT 管线目标，避免误当作可选字幕语言。
 
-### 已知限制（尤其哔哩哔哩）
+### B 站字幕：WBI 签名 + 多源 Fallback（0.3.0+）
 
-- **不是所有稿件都必须 Cookie**：若 B 站 Player API 在未登录下仍返回非空 `subtitle.subtitles` 且未标记需登录字幕，则匿名 yt-dlp 即可拉取 CC。
-- **部分稿件等价「必须登录态」**：接口返回 `need_login_subtitle` 时，匿名下列表常为 `[]`，与浏览器登录后能看到 UP 上传字幕的现象不一致；此时应在服务端配置 `YTDLP_COOKIE_FILE`（浏览器导出 Netscape cookies.txt），**重启后重新解析该链接**，使 yt-dlp 与解析/字幕下载共用 Cookie。
-- **验证方式**：本地执行 `yt-dlp --list-subs "<BV URL>"`，若除 `danmaku` 外仍无任何语言，则本站 AI/字幕链路同样无法在未登录下取得 CC。
-- 抖音等非 yt-dlp 分支不在此扩展讨论范围内；无平台字幕轨道则 AI 功能不可用。
+> 实现代码见 `backend/app/bilibili_subs.py`。
+
+#### 背景
+
+B 站于 2024 年底将字幕端点从 `/x/player/v2` 迁移到 `/x/player/wbi/v2`。旧端点返回的 `subtitle_url` 已不稳定（经常为空或无效内容，参见 [yt-dlp #11708](https://github.com/yt-dlp/yt-dlp/issues/11708)）。新端点需携带 WBI 签名参数 (`w_rid` + `wts`)。
+
+#### WBI 签名
+
+- 从 `/x/web-interface/nav` 获取 `img_key` 和 `sub_key`（匿名可用），密钥每日更替，本地缓存 1 小时。
+- 用固定 64 位置换表重排 `img_key + sub_key`，取前 32 位得到 `mixin_key`。
+- 请求参数加 `wts`（Unix 时间戳），按 key 排序 URL 编码后拼接 `mixin_key`，取 MD5 得到 `w_rid`。
+- 参考：[bilibili-API-collect/docs/misc/sign/wbi.md](https://github.com/SocialSisterYi/bilibili-API-collect/blob/master/docs/misc/sign/wbi.md)
+
+#### 多源瀑布 Fallback 策略
+
+| 优先级 | 数据源 | 端点 | 取字幕字段 |
+| ------ | ------ | ---- | ---------- |
+| 1 | View API | `/x/web-interface/view` | `data.subtitle.list` |
+| 2 | Player WBI API | `/x/player/wbi/v2` + WBI 签名 | `data.subtitle.subtitles` |
+| 3 | AI 摘要 API | `/x/web-interface/view/conclusion/get` + WBI 签名 | `data.model_result.subtitle[0].part_subtitle` |
+
+- 解析阶段（`probe()`）：按 1 → 2 → 3 顺序尝试，结果合并去重后返回前端。Source 3 仅在 1 & 2 均为空时才触发。
+- 拉取字幕（`fetch_track_srt()`）：同样走多源收集，找到对应语言后下载 `subtitle_url` JSON → 本地转 SRT。Source 3 的结果已内含 SRT 文本，无需额外下载。
+- **去重**：按语言 code 去重，靠前的数据源优先（即手动字幕 > AI 字幕 > 摘要转录）。
+- **Fallback**：多源全空时，仍回落到 yt-dlp 字幕下载逻辑。
+- **代码**：`bilibili_subs.py`（WBI 签名 + 多源）；`ytdlp_service._merge_bilibili_ai_subs()`；`subtitle_extractor._fetch_bilibili_ai_subs()`。
+
+#### 已知限制
+
+- **无需 Cookie 的场景**：多数公开稿件的 AI 字幕（`ai-zh`、`ai-en`）在匿名 + WBI 签名下可获取。
+- **需要登录的场景**：接口返回 `need_login_subtitle: true` 时，`subtitles` 列表为 `[]`；此时须配置 `YTDLP_COOKIE_FILE`（浏览器导出 Netscape cookies.txt），重启后重新解析。
+- **AI 摘要端点局限**：部分稿件无 AI 摘要（极短视频、纯音乐类），Source 3 也会返回空。
+- **WBI 密钥过期**：密钥每日更替，代码已做 1 小时自动刷新。若 B 站变更置换表则需手动更新 `_MIXIN_KEY_ENC_TAB`。
+- 抖音等非 yt-dlp 分支不在此扩展范围内。
+
+### ASR 语音转写 Fallback（SiliconFlow，0.4.0+）
+
+> 实现代码见 `backend/app/asr_service.py`；触发入口在 `ai_routes._ensure_transcript()`。
+
+#### 触发条件
+
+当平台字幕获取失败（B 站 `need_login_subtitle`、其他平台无字幕等），且 `SILICONFLOW_API_KEY` 已配置，自动进入 ASR 降级路径。
+
+#### 流程
+
+1. **音频提取**：调用 yt-dlp 以 `bestaudio` 格式下载音频，ffmpeg 转码为 mp3（64kbps，控制文件大小）。
+2. **上传转写**：将 mp3 发送到 SiliconFlow `/v1/audio/transcriptions`（OpenAI 兼容格式），使用免费模型 `FunAudioLLM/SenseVoiceSmall`。
+3. **构建 Cues**：ASR 返回纯文本（无时间戳），按句切分后根据视频总时长按字符比例分配估算时间戳，生成 `TranscriptCue` 列表。
+4. **写入缓存**：结果写入 `transcript_cache`，后续 summarize / mindmap / chat 复用，无需重复转写。
+5. **清理**：转写完成后立即删除临时音频文件。
+
+#### 环境变量
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SILICONFLOW_API_KEY` | （空，未配置则不启用 ASR） | SiliconFlow API 密钥 |
+| `SILICONFLOW_API_BASE` | `https://api.siliconflow.cn` | API 地址 |
+| `SILICONFLOW_ASR_MODEL` | `FunAudioLLM/SenseVoiceSmall` | ASR 模型（免费） |
+
+#### 限制
+
+- SiliconFlow 限制：音频时长 ≤ 1 小时，文件 ≤ 50 MB。超长视频自动跳过 ASR。
+- ASR 返回纯文本无时间戳，transcript 视图中的时间为估算值。
+- ASR 失败不阻塞流程，回退到"无字幕"错误提示。
 
 ## 九、维护节奏
 

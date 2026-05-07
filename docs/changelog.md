@@ -57,6 +57,93 @@
 
 ---
 
+## 0.4.0 — 2026-05-07（ASR 语音转写 Fallback + 前端适配）
+
+### 新增
+
+- `backend/app/asr_service.py`：完整 ASR 管线——yt-dlp 提取音频（bestaudio → mp3 64kbps）→ SiliconFlow `/v1/audio/transcriptions` 转写 → 按句切分 + 按字符比例分配时间戳 → 生成 `TranscriptCue` 列表。
+- `backend/app/ai_config.py`：新增 `siliconflow_api_key()`、`siliconflow_api_base()`、`siliconflow_asr_model()` 配置读取函数；`load_dotenv` 改用 `override=True` 确保 `.env` 变更即时生效。
+- `backend/app/ai_routes.py`：`_ensure_transcript()` 新增 Phase 2（ASR Fallback）——当 Phase 1（平台字幕）全部失败且 `SILICONFLOW_API_KEY` 已配置时，自动调用 `asr_for_task()` 转写音频生成字幕。ASR 结果以 `_asr` 语言 key 写入 `transcript_cache`，后续 summarize / mindmap / chat 可复用。
+- `backend/.env`：新增 `SILICONFLOW_API_KEY`、`SILICONFLOW_API_BASE`、`SILICONFLOW_ASR_MODEL` 环境变量。
+
+### 前端
+
+- `VideoSummary.vue`：移除"生成摘要/导图/问答"按钮的 `!subtitleOptions.length` 禁用条件，无平台字幕时仍可点击（后端自动 ASR）。
+- AI 面板说明文案从"基于平台字幕"更新为"基于字幕/语音转写"；无字幕提示从警告色改为中性提示"将自动使用 ASR 语音转写"。
+
+### 文档
+
+- `docs/design.md`：新增"ASR 语音转写 Fallback（SiliconFlow，0.4.0+）"章节，含触发条件、流程、环境变量、限制说明；更新目录结构索引补充新增文件。
+- `README.md`：补充 ASR Fallback 配置说明。
+
+### 验证（2026-05-07）
+
+- **BV1g8d8B6ENk**（无平台字幕，`need_login_subtitle=True`）：
+  - Phase 1 平台字幕：View API / Player WBI API / AI 摘要 API 三源均返回空 → 确认无平台字幕。
+  - Phase 2 ASR Fallback：yt-dlp 下载音频 → SiliconFlow 转写 → 成功获得 35 cues / 1258 字符。
+  - AI 摘要：基于 ASR 文本调用 DeepSeek 生成结构化摘要（主题概括 / 核心观点 / 关键步骤 / 术语定义 / 行动建议），内容准确。
+  - 前端完整 UI 测试通过：解析 → 展开 AI 助手 → 点击"生成摘要" → 流式渲染摘要。
+
+### 已知限制
+
+- SiliconFlow 免费模型 `SenseVoiceSmall` 限制：音频 ≤ 1 小时、文件 ≤ 50 MB；超长视频自动跳过 ASR。
+- ASR 返回纯文本无时间戳，字幕视图中的时间为按字符比例估算值。
+- SiliconFlow 账号需完成实名认证后 API Key 才可用。
+- ASR 需下载音频流，首次调用较慢（约 15–25 秒，视网络和视频时长而定）。
+
+---
+
+## 0.3.0 — 2026-05-07（B 站 WBI 签名 + 多源字幕 Fallback）
+
+### 新增
+
+- `backend/app/bilibili_subs.py` 全面重写：
+  - 实现 WBI 签名算法（`img_key` + `sub_key` → 置换表 → `mixin_key` → MD5 → `w_rid`），密钥缓存 1 小时自动刷新。
+  - 多源瀑布 Fallback：View API → Player WBI API → AI 摘要 API，三源按优先级尝试、合并去重。
+- `backend/app/ytdlp_service.py`：解析 B 站链接时调用 `bilibili_subs.probe()` 合并字幕列表。
+- `backend/app/subtitle_extractor.py`：字幕拉取支持 B 站多源路径。
+
+### 文档
+
+- `docs/design.md`：新增"B 站字幕：WBI 签名 + 多源 Fallback（0.3.0+）"章节。
+
+### 已知限制
+
+- 匿名 + WBI 签名可获取多数公开稿件的 AI 字幕，但 `need_login_subtitle=True` 时仍需 Cookie。
+- AI 摘要端点部分稿件无数据（极短视频、纯音乐类）。
+- WBI 密钥每日更替，代码已做自动刷新；若 B 站变更置换表需手动更新 `_MIXIN_KEY_ENC_TAB`。
+
+---
+
+## 0.2.1 — 2026-05-07（B 站 AI 字幕无 Cookie 接入）
+
+### 新增
+
+- `backend/app/bilibili_subs.py`：直接调用 B 站 Player API（`/x/player/v2`）获取 AI 自动字幕轨道（ai-zh / ai-en / ai-ja …），无需 Cookie，多数公开稿件匿名可用。
+- 解析阶段（`ytdlp_service.parse_url`）：当 extractor 为 BiliBili 时，额外 probe Player API 并将 AI 轨道合并去重到字幕列表。
+- 字幕拉取（`subtitle_extractor.fetch_subtitles_to_cues`）：若请求语言为 ai-*，走 Bilibili JSON → SRT 本地转换路径，不经过 yt-dlp；失败时自动回退原逻辑。
+
+### 文档
+
+- `README.md`：更新 B 站字幕说明为「优先尝试 AI 字幕端点，无需 Cookie」。
+- `docs/design.md` 八点五：增补 AI 字幕端点策略、代码索引、去重规则及限制。
+
+### 验证（2026-05-07）
+
+- **BV1g8d8B6ENk**：`/x/player/v2` 匿名返回 `need_login_subtitle=True`，`subtitles=[]`。**未命中**——该稿件需登录态才返回字幕。
+- **BV1vZ4y1M7mQ**：`need_login_subtitle=False`，但 `subtitles=[]`。**未命中**——当前 API 匿名不返回 AI 字幕。
+- 额外测试 B 站热门榜 15 条视频，全部匿名返回 0 条字幕，无论 `need_login_subtitle` 值如何。
+- **结论**：B 站 `/x/player/v2` 当前在完全匿名（无 SESSDATA）下不返回 AI 字幕。代码路径正确（BV 提取、View/Player API 调用、JSON→SRT 转换、`parse_srt` roundtrip 均通过），当配置 Cookie 或 B 站放开匿名限制时即可生效。目前 `probe()` 返回空列表，`fetch_subtitles_to_cues` 正确回退到 yt-dlp 路径。
+
+### 已知限制
+
+- **当前状态**：B 站 Player API 在无 Cookie 状态下不返回 AI 字幕列表（含 `ai-zh`）；需配置 `YTDLP_COOKIE_FILE` 以传入 `SESSDATA` 等鉴权信息。
+- `/x/player/v2` 匿名请求长期有效（返回 200），但 `subtitles` 字段为空；若 B 站全面切换到 WBI 签名校验，需后续补实现。
+- 极少数稿件（超短/纯音乐）B 站不生成 AI 字幕，此时列表仍为空。
+- 本次不实现 WBI 签名算法，不做本地 Whisper ASR 兜底。
+
+---
+
 ## 0.2.0 — 2026-05-06（AI 学习助手 + B 站字幕说明）
 
 ### 新增

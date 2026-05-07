@@ -1,4 +1,4 @@
-"""AI summarization routes (DeepSeek + platform subtitles)."""
+"""AI summarization routes (DeepSeek + platform subtitles + ASR fallback)."""
 
 from __future__ import annotations
 
@@ -20,9 +20,10 @@ from .ai_schemas import (
     TranscriptRequest,
     TranscriptResponse,
 )
+from .asr_service import asr_for_task, is_asr_configured
 from .deepseek_client import chat_completion_text, stream_chat_completion, truncate_for_llm
 from .schemas import ErrorPayload
-from .srt_parser import cues_to_plain_text
+from .srt_parser import TranscriptCue, cues_to_plain_text
 from .subtitle_extractor import fetch_subtitles_to_cues, resolve_langs_for_task
 from .task_store import task_store
 from . import transcript_cache
@@ -106,6 +107,20 @@ def _append_bilibili_cookie_tip(task_id: str, hint: str) -> str:
     return f"{hint} {tip}"
 
 
+async def _try_asr_fallback(task_id: str) -> Optional[Tuple[List[TranscriptCue], str]]:
+    """Attempt ASR transcription as fallback. Returns None on failure."""
+
+    if not is_asr_configured():
+        return None
+    try:
+        cues, plain = await asr_for_task(task_id)
+        if cues and plain:
+            return cues, plain
+    except Exception as exc:
+        logger.warning("ASR fallback failed for task %s: %s", task_id, exc)
+    return None
+
+
 async def _ensure_transcript(
     task_id: str, subtitle_langs: Optional[List[str]]
 ) -> Tuple[List[str], List[TranscriptCue], str]:
@@ -113,6 +128,8 @@ async def _ensure_transcript(
     if record is None:
         raise _http_error("task_not_found", "Task does not exist.", status_code=404)
 
+    # --- Phase 1: try platform subtitles ---
+    no_platform_subs = False
     try:
         langs = await asyncio.to_thread(resolve_langs_for_task, task_id, subtitle_langs)
     except ValueError as exc:
@@ -122,38 +139,51 @@ async def _ensure_transcript(
     except RuntimeError as exc:
         msg = str(exc) or "no subtitles"
         if "no subtitles" in msg.lower():
-            raise _http_error(
-                "no_subtitles",
-                "当前视频没有可用的平台字幕或自动字幕，无法生成摘要。",
-                hint=_append_bilibili_cookie_tip(task_id, "可更换含字幕的视频稍后再试。"),
-            ) from exc
-        raise _http_error("subtitle_resolve_failed", msg, status_code=502) from exc
+            no_platform_subs = True
+            langs = []
+        else:
+            raise _http_error("subtitle_resolve_failed", msg, status_code=502) from exc
 
-    cached = transcript_cache.get(task_id, langs)
+    if not no_platform_subs:
+        cached = transcript_cache.get(task_id, langs)
+        if cached:
+            cues, plain_full = cached
+            return langs, cues, plain_full
+
+        try:
+            cues = await asyncio.to_thread(fetch_subtitles_to_cues, task_id, langs)
+        except RuntimeError:
+            cues = []
+
+        if cues:
+            plain_full = cues_to_plain_text(cues)
+            transcript_cache.put(task_id, langs, cues, plain_full)
+            return langs, cues, plain_full
+
+        no_platform_subs = True
+
+    # --- Phase 2: ASR fallback ---
+    asr_cache_key = ["_asr"]
+    cached = transcript_cache.get(task_id, asr_cache_key)
     if cached:
         cues, plain_full = cached
-        return langs, cues, plain_full
+        return asr_cache_key, cues, plain_full
 
-    try:
-        cues = await asyncio.to_thread(fetch_subtitles_to_cues, task_id, langs)
-    except RuntimeError as exc:
-        raise _http_error(
-            "subtitle_fetch_failed",
-            str(exc) or "字幕下载失败",
-            hint="请稍后重试或确认链接仍可访问。",
-            status_code=502,
-        ) from exc
+    result = await _try_asr_fallback(task_id)
+    if result:
+        cues, plain_full = result
+        transcript_cache.put(task_id, asr_cache_key, cues, plain_full)
+        return asr_cache_key, cues, plain_full
 
-    if not cues:
-        raise _http_error(
-            "no_subtitles",
-            "未能解析到有效的字幕文本。",
-            hint=_append_bilibili_cookie_tip(task_id, "该平台可能未提供所选语言的字幕。"),
-        )
-
-    plain_full = cues_to_plain_text(cues)
-    transcript_cache.put(task_id, langs, cues, plain_full)
-    return langs, cues, plain_full
+    # --- Both paths failed ---
+    hint = "可更换含字幕的视频稍后再试。"
+    if not is_asr_configured():
+        hint += " 或在 backend/.env 配置 SILICONFLOW_API_KEY 启用 ASR 语音转写。"
+    raise _http_error(
+        "no_subtitles",
+        "当前视频没有可用的平台字幕，ASR 语音转写也未成功。",
+        hint=_append_bilibili_cookie_tip(task_id, hint),
+    )
 
 
 @router.post("/transcript", response_model=TranscriptResponse)

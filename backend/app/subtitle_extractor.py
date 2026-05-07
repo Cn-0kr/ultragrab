@@ -10,6 +10,7 @@ from typing import List, Optional, Sequence, Tuple
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 
+from . import bilibili_subs
 from .schemas import SubtitleLanguage
 from .settings import settings
 from .srt_parser import TranscriptCue, parse_srt
@@ -59,6 +60,31 @@ def _pick_srt_file(out_dir: Path, langs: Sequence[str]) -> Optional[Path]:
     return paths[0]
 
 
+def _is_bilibili_extractor(extractor: Optional[str]) -> bool:
+    if not extractor:
+        return False
+    return extractor.lower().startswith("bilibili") or extractor.lower() == "bilibili"
+
+
+def _has_bilibili_ai_lang(langs: List[str]) -> bool:
+    return any(lang.startswith("ai-") for lang in langs)
+
+
+def _fetch_bilibili_ai_subs(task_id: str, webpage_url: str, langs: List[str]) -> List[TranscriptCue]:
+    """Fetch subtitle via Bilibili Player API directly, bypassing yt-dlp."""
+    lan = next((l for l in langs if l.startswith("ai-")), langs[0])
+    srt_text = bilibili_subs.fetch_track_srt(webpage_url, lan)
+    if not srt_text:
+        return []
+
+    out_dir = settings.download_dir / task_id / "_ai_subs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    srt_path = out_dir / f"{lan}.srt"
+    srt_path.write_text(srt_text, encoding="utf-8")
+
+    return parse_srt(srt_text)
+
+
 def fetch_subtitles_to_cues(task_id: str, langs: List[str]) -> List[TranscriptCue]:
     """blocking: yt-dlp subtitle download + parse."""
 
@@ -68,6 +94,13 @@ def fetch_subtitles_to_cues(task_id: str, langs: List[str]) -> List[TranscriptCu
         raise RuntimeError("task has no webpage_url")
 
     validate_url(meta.webpage_url)
+
+    # Bilibili AI subtitle path: bypass yt-dlp entirely
+    if _is_bilibili_extractor(meta.extractor) and _has_bilibili_ai_lang(langs):
+        cues = _fetch_bilibili_ai_subs(task_id, meta.webpage_url, langs)
+        if cues:
+            return cues
+        logger.info("Bilibili AI sub path returned empty, falling back to yt-dlp")
 
     out_dir = settings.download_dir / task_id / "_ai_subs"
     out_dir.mkdir(parents=True, exist_ok=True)

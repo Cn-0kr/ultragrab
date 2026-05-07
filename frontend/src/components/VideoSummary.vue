@@ -274,12 +274,11 @@ function toggleLang(code: string) {
       <span class="text-sm font-semibold text-brand-dark">{{ panelOpen ? '收起' : '展开' }}</span>
     </button>
     <p class="mt-1 text-xs text-ink-soft">
-      基于<strong class="font-semibold text-ink">平台字幕</strong>生成摘要、导图与问答（需服务端
+      基于<strong class="font-semibold text-ink">字幕 / 语音转写</strong>生成摘要、导图与问答（需服务端
       DEEPSEEK_API_KEY）。支持 yt-dlp
       可解析的站点（含 <strong class="font-semibold text-ink">YouTube、Bilibili</strong>
-      等）；<strong class="font-semibold text-ink">抖音</strong
-      >等平台若解析结果中<strong class="font-semibold text-ink">无字幕轨道</strong
-      >则无法使用本节功能。
+      等）；无平台字幕时将自动尝试
+      <strong class="font-semibold text-ink">ASR 语音转写</strong>提取文本。
     </p>
 
     <div v-if="subtitleOptions.length" class="mt-3 flex flex-wrap gap-2">
@@ -296,8 +295,8 @@ function toggleLang(code: string) {
       </button>
       <span class="text-xs text-ink-mute">（未选则自动偏好中文/英文）</span>
     </div>
-    <p v-else class="mt-2 text-xs font-semibold text-amber-800">
-      当前解析结果未列出字幕轨道：AI 功能可能不可用。
+    <p v-else class="mt-2 text-xs text-ink-mute">
+      当前解析结果未列出字幕轨道，将自动使用 ASR 语音转写。
     </p>
 
     <div v-if="panelOpen" class="mt-4 flex flex-col gap-4">
@@ -331,7 +330,7 @@ function toggleLang(code: string) {
           <button
             type="button"
             class="btn-primary !py-2 !text-sm"
-            :disabled="summaryRunning || !subtitleOptions.length"
+            :disabled="summaryRunning"
             @click="runSummary"
           >
             {{ summaryRunning ? '生成中…' : '生成摘要' }}
@@ -392,7 +391,7 @@ function toggleLang(code: string) {
           <button
             type="button"
             class="btn-primary !py-2 !text-sm"
-            :disabled="mindLoading || !subtitleOptions.length"
+            :disabled="mindLoading"
             @click="runMindmap"
           >
             {{ mindLoading ? '生成中…' : '生成思维导图' }}
@@ -426,7 +425,7 @@ function toggleLang(code: string) {
             <button
               type="button"
               class="btn-primary !py-2 !text-sm"
-              :disabled="chatRunning || !subtitleOptions.length"
+              :disabled="chatRunning"
               @click="sendChat"
             >
               {{ chatRunning ? '回复中…' : '发送' }}
