@@ -19,7 +19,8 @@ const platforms = [
           下载<span class="bg-accent px-3 py-1 inline-block -rotate-2 border-2 border-ink shadow-sticker-sm">任何视频</span>
         </h1>
         <p class="max-w-xl text-lg text-ink-soft md:text-xl">
-          粘贴链接即刻解析。服务端合并最高画质、直链代理保留 Referer、原字幕保留。
+          粘贴链接即刻解析。服务端合并最高画质、直链代理保留 Referer、原字幕保留；解析后同页可使用
+          AI 摘要、时间轴字幕与导图梳理。
           电脑和手机都可使用，不装软件、无额外广告。
         </p>
         <div class="flex flex-wrap gap-3">
