@@ -56,7 +56,7 @@ npm run dev
 
 ### AI 学习助手（可选）
 
-依赖 **DeepSeek API**。在 `backend/.env` 中配置 `DEEPSEEK_API_KEY`（可参考 `backend/.env.example`）。前端解析任务成功后，工作台展开「AI 学习助手」可使用字幕列表、摘要（SSE）、思维导图（Mermaid）、基于字幕的问答。
+依赖 **DeepSeek API**。在 `backend/.env` 中配置 `DEEPSEEK_API_KEY`（可参考 `backend/.env.example`）。前端解析任务成功后，工作台展开「AI 学习助手」可使用字幕列表、摘要（SSE）、思维导图（Mermaid，支持全屏与 **PNG/SVG** 导出）、字幕 **SRT/TXT** 导出、基于字幕的问答。无平台字幕且已配置 `SILICONFLOW_API_KEY` 时会走 ASR 转写后再生成摘要/导图/问答。详见 [docs/design.md](./docs/design.md) 八点五与 0.5.0+ 前端说明、`docs/changelog.md`。
 
 **字幕获取策略：**
 

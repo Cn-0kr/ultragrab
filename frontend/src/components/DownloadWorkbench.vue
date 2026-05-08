@@ -507,6 +507,7 @@ const hasEntries = computed(() => entries.value.length > 0)
               <VideoSummary
                 :task-id="entry.parse.task_id"
                 :subtitle-options="entry.parse.subtitles"
+                :video-title="entry.parse.metadata.title ?? undefined"
               />
             </template>
           </div>

@@ -276,6 +276,35 @@ B 站于 2024 年底将字幕端点从 `/x/player/v2` 迁移到 `/x/player/wbi/v
 - ASR 返回纯文本无时间戳，transcript 视图中的时间为估算值。
 - ASR 失败不阻塞流程，回退到"无字幕"错误提示。
 
+### 前端 AI 面板：导图、导出与错误隔离（0.5.0+）
+
+> 实现代码：`frontend/src/components/VideoSummary.vue`、`DownloadWorkbench.vue`（传入 `videoTitle` 供导出文件名）。
+
+#### 四 Tab 独立错误态
+
+- `summaryErr` / `subsErr` / `mindErr` / `chatErr` 分别绑定「总结 / 字幕 / 导图 / 问答」，避免单例 `transcriptErr` 跨 Tab 串台。
+
+#### 字幕语言选择
+
+- **主行**：非自动翻译字幕 + **固定钉选**语言 code：`zh-Hans`、`zh-Hant`、`zh`、`zh-CN`、`zh-TW`（简体/繁体常亮，即使用户轨道标记为自动翻译也并入主行）。
+- **折叠区**：其余 `is_automatic` 字幕，展示「更多自动翻译字幕（N 种）」，展开后可搜索筛选。
+
+#### 字幕导出
+
+- **SRT**：标准序号 + 时间轴 + 文本；文件名：`{videoTitle}.srt`（无标题则 `subtitle.srt`）。
+- **TXT**：纯文本按行拼接歌词/转写；文件名：`{videoTitle}.txt`。
+
+#### 思维导图（Mermaid）
+
+- **生成**：`POST /api/mindmap` 返回 JSON 中的 `mermaid` 字符串；系统提示词要求 **Mermaid `mindmap`** 缩进语法，并限制节点文案中的括号/引号/冒号等以降低解析失败率（`backend/app/ai_routes.py` 中 `_MINDMAP_SYSTEM`）。
+- **首渲预处理**：`prepareMermaidForRender()` 按**首行指令**区分 `flowchart`/`graph` 与 `mindmap`；flowchart **不**再强行包一层 `mindmap`，且 **保留** `-->` 行（避免此前误删边导致只剩 `flowchart TD` 单节点）。
+- **mindmap 清洗**：去代码围栏、去掉 `classDef`/`class`、去掉含 `-->` 的行（mindmap 不应有箭头）。
+- **降级**：mindmap 渲染失败时，`convertMindmapToFlowchart()` 将缩进树转为 `flowchart TD` 再渲；flowchart 首渲失败则 `repairFlowchartForFallback()` 占位重试。
+- **重复渲染**：`lastRenderedCode` 避免同一 `mindmapCode` 在切换 Tab 时反复 `run()` 触发 Mermaid 内部 ID 冲突与误报「导图渲染失败」。
+- **全屏**：`Teleport` 全屏层 + `ESC` 关闭；克隆 SVG 时去掉固定宽高，用 `maxWidth`/`maxHeight` 适配视口。
+- **导出 PNG**：克隆 SVG 时将 `foreignObject` 换为 `<text>`（避免 Canvas 污染导致 `toBlob` SecurityError）；再以 `data:image/svg+xml;base64,...` 入 `<img>` 绘制 Canvas。
+- **导出 SVG**：`XMLSerializer` 序列化克隆后的 SVG 下载。
+
 ## 九、维护节奏
 
 - 架构/接口变更 → 改本文件 + `api.md`（若已建）；重大权衡新增 `decisions/NNN-*.md`。

@@ -22,7 +22,7 @@ const proFeatures = [
     <div class="grid gap-6 md:grid-cols-2">
       <article class="card p-8">
         <h2 class="text-3xl">Free</h2>
-        <p class="mt-1 text-ink-soft">够用、够快，做一次"右键另存为"。</p>
+        <p class="mt-1 text-ink-soft">够用、够快，右键解决一切。</p>
         <div class="mt-4 text-4xl font-display">¥0<span class="text-base text-ink-mute">/forever</span></div>
         <ul class="mt-4 space-y-2 text-ink-soft">
           <li v-for="f in freeFeatures" :key="f" class="flex items-center gap-2">

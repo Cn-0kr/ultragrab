@@ -2,6 +2,31 @@
 
 > 每完成一个阶段必须回写本文件：做了什么、验证了什么、已知限制。
 
+## 0.5.0 — 2026-05-08（AI 面板：导图修复、导出、字幕语言 UX）
+
+### 新增 / 改进
+
+- **错误隔离**：`VideoSummary.vue` 中总结 / 字幕 / 导图 / 问答各用独立 `ref` 错误状态，错误仅出现在对应 Tab。
+- **思维导图**：全屏预览（`Teleport` + 关闭按钮 + ESC）；区分 LLM 返回 **mindmap** 与 **flowchart**，避免误删 `-->` 导致只显示 `flowchart TD` 单框；mindmap 失败时降级为流程图树；去重渲染降低 Mermaid 报错。
+- **导出**：导图支持 **PNG**（处理 `foreignObject` + base64 SVG 入 Canvas，避免污损画布）与 **SVG**；字幕支持 **SRT** 与 **TXT**；文件名优先使用 `videoTitle`（`DownloadWorkbench.vue` 传入 `metadata.title`）。
+- **字幕语言 UX**：主行展示常用语言 + 钉选简体/繁体中文（`zh-Hans` 等）；大量自动翻译语言收入可搜索的折叠区。
+- **后端**：`_MINDMAP_SYSTEM` 收紧节点文案规则，减少 Mermaid 语法错误。
+
+### 文档
+
+- `docs/design.md`：新增「前端 AI 面板：导图、导出与错误隔离（0.5.0+）」。
+
+### 验证（2026-05-08）
+
+- 本地启动 `uvicorn` + `vite`，浏览器：YouTube 解析 → 展开 AI 助手 → 导图生成、多节点展示、全屏与导出按钮可用；控制台无 `Tainted canvases` 报错。
+
+### 已知限制
+
+- 导图仍依赖模型输出合法 Mermaid；极端乱码时需用户「重新生成」。
+- PNG 导出将 `foreignObject` 转为简单 `<text>`，复杂样式可能与屏显略有差异。
+
+---
+
 ## 0.1.0 — 2026-05-04 (阶段 0–3 一次性交付，MVP 上线)
 
 ### 阶段 0 · 文档落地

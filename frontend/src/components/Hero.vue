@@ -15,12 +15,12 @@ const platforms = [
       <div class="flex flex-col items-start gap-6">
         <span class="tag">批量 · 高清 · 字幕 · 1800+ 平台</span>
         <h1 class="text-4xl leading-[1.05] md:text-6xl lg:text-7xl">
-          像右键"另存为"一样<br />
+          仅需右键点击<br />
           下载<span class="bg-accent px-3 py-1 inline-block -rotate-2 border-2 border-ink shadow-sticker-sm">任何视频</span>
         </h1>
         <p class="max-w-xl text-lg text-ink-soft md:text-xl">
-          粘贴链接即刻解析。服务端合并最高画质、直链代理保留 Referer、字幕原汁保留。
-          桌面和手机都顺手，不装软件、不跳广告。
+          粘贴链接即刻解析。服务端合并最高画质、直链代理保留 Referer、原字幕保留。
+          电脑和手机都可使用，不装软件、无额外广告。
         </p>
         <div class="flex flex-wrap gap-3">
           <button class="btn-primary" @click="$emit('cta')">
