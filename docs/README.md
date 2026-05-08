@@ -9,9 +9,10 @@
 1. [requirements.md](./requirements.md) — 产品需求分析：目标用户、核心场景、功能清单、非功能要求、合规边界、成功指标。
 2. [design.md](./design.md) — 方案设计：技术栈、架构图、目录结构、yt-dlp 封装与三种下载模式、API 设计、安全策略、UI 方向、扩展点。
 3. [plan.md](./plan.md) — 分阶段交付计划：阶段 0–5 路线与验收节点。
-4. [changelog.md](./changelog.md) — 每期交付的功能差异。
-5. （后续补齐）[api.md](./api.md) — 接口详细说明（参数/响应/错误码）。
-6. （后续补齐）`decisions/NNN-*.md` — 重要技术决策记录（ADR 风格）。
+4. [plan-stripe-membership-jwt-sqlite.md](./plan-stripe-membership-jwt-sqlite.md) — Stripe 会员（JWT + SQLite + Checkout）专项实现计划（正式副本）。
+5. [changelog.md](./changelog.md) — 每期交付的功能差异。
+6. （后续补齐）[api.md](./api.md) — 接口详细说明（参数/响应/错误码）。
+7. （后续补齐）`decisions/NNN-*.md` — 重要技术决策记录（ADR 风格）。
 
 ## 文件索引
 
@@ -21,6 +22,7 @@
 | `requirements.md` | 需求分析 | 需求范围调整时 |
 | `design.md` | 方案设计 | 架构/接口/技术选型变动时 |
 | `plan.md` | 分阶段交付计划 | 计划调整、阶段验收后 |
+| `plan-stripe-membership-jwt-sqlite.md` | Stripe 会员专项实现计划 | 方案变更、与 `plan.md` 对齐或合并验收后 |
 | `api.md` | 接口契约 | 接口字段/错误码变动时 |
 | `changelog.md` | 交付记录 | 每阶段验收后 |
 | `decisions/NNN-*.md` | 技术决策 | 有重要权衡/取舍时新增 |
