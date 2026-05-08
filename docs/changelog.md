@@ -2,6 +2,28 @@
 
 > 每完成一个阶段必须回写本文件：做了什么、验证了什么、已知限制。
 
+## 0.6.0 — 2026-05-08（工作台同屏：Flex 分栏 + 解析后自动摘要）
+
+### 新增 / 改进
+
+- **任务卡布局**：`DownloadWorkbench.vue` 在 `lg` 断点使用 **Flex 横向分栏**（左侧约 `basis 42%`：封面 + 格式/下载；右侧 `flex-1 min-w-0`：**AI 学习助手**，`sticky` + 限高滚动），小屏仍为纵向堆叠，便于一屏对照「下载信息」与「总结」。
+- **自动摘要**：解析成功、`VideoSummary` 挂载后 **`autoSummarize` 为真** 时自动调用 `runSummary()`，无需再点「生成摘要」；`task_id` 维度去重，避免对同一任务重复触发。
+- **Props 显式化**：工作台传入 `:default-open="true"`、`:auto-summarize="true"`、`embedded`（右侧嵌入式：边框/背景略收紧）。
+- **展开与长耗时提示**：自动总结开始时 **`panelOpen = true`**；总结 Tab 在 **`transcriptLoading`** 与流式摘要阶段分别展示「拉取字幕/转写」与「流式生成摘要」说明，避免长视频（先 `/api/transcript` 再等 `/api/summarize`）被误认为无响应。
+- **设计文档**：`docs/design.md` 增加「工作台同屏 + VideoSummary 集成（0.6.0+）」；目录结构索引补充 `VideoSummary.vue`。
+
+### 验证（2026-05-08）
+
+- `frontend`：`vue-tsc --noEmit`、`vite build` 通过。
+- 后端：`POST /api/parse` + `POST /api/transcript` 实测长视频（如 YouTube `g_cU-DrUPGI`）转写阶段可达数十秒，前端进度文案与按钮「生成中…」状态一致。
+
+### 已知限制
+
+- **批量任务**：每条解析成功的任务各触发一次自动摘要，并发与 API 用量随任务数增加；若需「仅首条自动」或全局开关，可后续再加。
+- 长视频无平台字幕时依赖 ASR，首包慢属预期，依赖文案与加载态降低误解。
+
+---
+
 ## 0.5.0 — 2026-05-08（AI 面板：导图修复、导出、字幕语言 UX）
 
 ### 新增 / 改进

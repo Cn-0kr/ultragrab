@@ -79,6 +79,7 @@ free-download-vediowebsite/
       └─ components/
          ├─ Hero.vue
          ├─ DownloadWorkbench.vue
+         ├─ VideoSummary.vue       # AI：摘要 / 字幕 / 导图 / 问答（同屏挂载于工作台）
          ├─ PricingTeaser.vue
          ├─ FAQ.vue
          └─ Footer.vue
@@ -304,6 +305,25 @@ B 站于 2024 年底将字幕端点从 `/x/player/v2` 迁移到 `/x/player/wbi/v
 - **全屏**：`Teleport` 全屏层 + `ESC` 关闭；克隆 SVG 时去掉固定宽高，用 `maxWidth`/`maxHeight` 适配视口。
 - **导出 PNG**：克隆 SVG 时将 `foreignObject` 换为 `<text>`（避免 Canvas 污染导致 `toBlob` SecurityError）；再以 `data:image/svg+xml;base64,...` 入 `<img>` 绘制 Canvas。
 - **导出 SVG**：`XMLSerializer` 序列化克隆后的 SVG 下载。
+
+### 工作台同屏 + VideoSummary 集成（0.6.0+）
+
+> 实现代码：`frontend/src/components/DownloadWorkbench.vue`、`frontend/src/components/VideoSummary.vue`。
+
+#### 布局
+
+- **大屏（`lg+`）**：任务卡主体为 **Flex** — `flex-col` → `lg:flex-row lg:items-start`；左侧 `lg:basis-[42%] lg:shrink-0`（媒体与下载控件），右侧 `flex-1 min-w-0`，并设 `lg:sticky lg:top-24` 与 `max-height` + 内部滚动，减少长摘要时整页跳动。
+- **小屏**：单列纵向，顺序为先左列（下载）再右列（AI）。
+
+#### 自动摘要
+
+- `VideoSummary` 支持 `defaultOpen`、`autoSummarize`、`embedded`（布尔，含默认值）。
+- `autoSummarize ===  true` 时，对 `taskId` **首次** `watch(..., { immediate: true })` 触发 `runSummary()`；开始时将 `panelOpen` 置为 `true`，保证用户可见 Tab 与加载文案。
+- 流程仍为：`ensureTranscript()`（可能较慢，尤其 ASR）→ `streamSummarize`（SSE）；总结 Tab 区分 **转写中** 与 **摘要流式输出中** 的提示 copy。
+
+#### 与下载交互的关系
+
+- 下载模式、格式选择、轮询进度等逻辑**独立于** AI 面板；仅任务卡视觉分区与「解析成功后才挂载 `VideoSummary`（`v-if="entry.parse"`）」相关。
 
 ## 九、维护节奏
 

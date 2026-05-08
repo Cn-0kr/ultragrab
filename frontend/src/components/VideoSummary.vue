@@ -12,15 +12,28 @@ import {
   type TranscriptCue,
 } from '../api/videoAi'
 
-const props = defineProps<{
-  taskId: string
-  subtitleOptions: SubtitleLanguage[]
-  videoTitle?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    taskId: string
+    subtitleOptions: SubtitleLanguage[]
+    videoTitle?: string
+    /** 初始是否展开 AI 面板（单链接工作台默认展开） */
+    defaultOpen?: boolean
+    /** 挂载后自动跑一次摘要（批量解析时建议关闭） */
+    autoSummarize?: boolean
+    /** 贴入右侧分栏时略微收紧外框样式 */
+    embedded?: boolean
+  }>(),
+  {
+    defaultOpen: false,
+    autoSummarize: false,
+    embedded: false,
+  },
+)
 
 type TabId = 'summary' | 'subs' | 'mind' | 'chat'
 
-const panelOpen = ref(false)
+const panelOpen = ref(props.defaultOpen)
 const activeTab = ref<TabId>('summary')
 
 const cues = ref<TranscriptCue[]>([])
@@ -172,6 +185,19 @@ async function runSummary() {
     summaryAbort.value = null
   }
 }
+
+const autoSummaryForTask = ref<string | null>(null)
+watch(
+  () => props.taskId,
+  (id) => {
+    if (!props.autoSummarize || !id) return
+    if (autoSummaryForTask.value === id) return
+    autoSummaryForTask.value = id
+    panelOpen.value = true
+    void runSummary()
+  },
+  { immediate: true },
+)
 
 function stopSummary() {
   summaryAbort.value?.abort()
@@ -603,7 +629,12 @@ function downloadSubtitleTxt() {
 
 <template>
   <div
-    class="video-ai-panel mt-4 rounded-2xl border-2 border-dashed border-ink/25 bg-brand-soft/40 p-4 font-sans text-ink antialiased shadow-sticker-sm"
+    :class="[
+      'video-ai-panel rounded-2xl border-2 p-4 font-sans text-ink antialiased shadow-sticker-sm',
+      props.embedded
+        ? 'border-ink/15 bg-white/95'
+        : 'mt-4 border-dashed border-ink/25 bg-brand-soft/40',
+    ]"
   >
     <button
       type="button"
@@ -723,6 +754,12 @@ function downloadSubtitleTxt() {
           class="markdown-summary max-w-none space-y-2 rounded-2xl border-2 border-ink bg-white p-4 text-sm leading-relaxed text-ink shadow-sticker-sm"
           v-html="summaryHtml(summaryText)"
         />
+        <p v-else-if="summaryRunning && transcriptLoading" class="text-sm text-ink-soft">
+          正在获取字幕或进行语音转写（长视频可能需数分钟），完成后将自动生成摘要…
+        </p>
+        <p v-else-if="summaryRunning" class="text-sm text-ink-soft">
+          正在流式生成摘要，请稍候…
+        </p>
         <p v-else class="text-sm text-ink-soft">生成后可在此查看 Markdown 结构化的要点提纲。</p>
       </div>
 

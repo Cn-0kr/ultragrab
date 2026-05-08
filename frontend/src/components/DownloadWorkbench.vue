@@ -350,8 +350,51 @@ const hasEntries = computed(() => entries.value.length > 0)
         :key="entry.id"
         class="card overflow-hidden"
       >
-        <div class="grid grid-cols-1 gap-6 p-6 md:grid-cols-[220px_1fr]">
-          <div class="flex flex-col gap-2">
+        <div class="border-b border-ink/10 p-6 md:p-8 md:pb-5">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-xs uppercase tracking-wide text-ink-mute">
+                {{ statusLabel(entry) }}
+              </div>
+              <h3 class="mt-1 text-xl font-display md:text-2xl">
+                {{ entry.parse?.metadata.title || entry.url }}
+              </h3>
+              <p class="mt-0.5 truncate text-xs text-ink-mute md:text-sm">
+                {{ entry.parse?.metadata.uploader || entry.url }}
+              </p>
+            </div>
+            <button
+              class="btn-ghost shrink-0 !px-2 !py-1"
+              aria-label="移除任务"
+              @click="removeEntry(entry)"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div v-if="entry.status === 'parsing'" class="mt-4 flex items-center gap-2 text-ink-soft">
+            <Spinner /> 正在解析视频信息…
+          </div>
+
+          <div
+            v-else-if="entry.status === 'error'"
+            class="mt-4 rounded-2xl border-2 border-red-400 bg-red-50 p-3 text-sm text-red-800"
+          >
+            <div class="font-semibold">{{ entry.error?.message || '失败' }}</div>
+            <div v-if="entry.error?.hint" class="mt-1 text-red-700">{{ entry.error.hint }}</div>
+            <div class="mt-2 flex gap-2">
+              <button class="btn-secondary !px-3 !py-1.5 !text-sm" @click="retryEntry(entry)">
+                重试
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="entry.status !== 'error'"
+          class="flex flex-col gap-6 p-6 lg:flex-row lg:items-start lg:gap-8 lg:p-8 lg:pt-6"
+        >
+          <div class="flex w-full min-w-0 flex-col gap-4 lg:basis-[42%] lg:flex-shrink-0">
             <div class="aspect-video overflow-hidden rounded-2xl border-2 border-ink bg-ink/5">
               <img
                 v-if="entry.parse?.metadata.thumbnail && !entry.thumbnailLoadFailed"
@@ -381,47 +424,10 @@ const hasEntries = computed(() => entries.value.length > 0)
                 🌐 {{ entry.parse.metadata.extractor }}
               </span>
             </div>
-          </div>
 
-          <div class="flex min-w-0 flex-col gap-3">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="text-xs uppercase tracking-wide text-ink-mute">
-                  {{ statusLabel(entry) }}
-                </div>
-                <h3 class="mt-1 truncate text-xl font-display">
-                  {{ entry.parse?.metadata.title || entry.url }}
-                </h3>
-                <p class="mt-0.5 truncate text-xs text-ink-mute">
-                  {{ entry.parse?.metadata.uploader || entry.url }}
-                </p>
-              </div>
-              <button
-                class="btn-ghost !px-2 !py-1"
-                aria-label="移除任务"
-                @click="removeEntry(entry)"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div v-if="entry.status === 'parsing'" class="flex items-center gap-2 text-ink-soft">
-              <Spinner /> 正在解析视频信息…
-            </div>
-
-            <div v-else-if="entry.status === 'error'" class="rounded-2xl border-2 border-red-400 bg-red-50 p-3 text-sm text-red-800">
-              <div class="font-semibold">{{ entry.error?.message || '失败' }}</div>
-              <div v-if="entry.error?.hint" class="mt-1 text-red-700">{{ entry.error.hint }}</div>
-              <div class="mt-2 flex gap-2">
-                <button class="btn-secondary !py-1.5 !px-3 !text-sm" @click="retryEntry(entry)">
-                  重试
-                </button>
-              </div>
-            </div>
-
-            <template v-else-if="entry.parse">
-              <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_minmax(220px,auto)]">
-                <label class="block">
+            <template v-if="entry.parse">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <label class="block min-w-0">
                   <span class="text-xs font-semibold uppercase text-ink-mute">格式 / 清晰度</span>
                   <select
                     v-model="entry.selectedFormat"
@@ -439,14 +445,14 @@ const hasEntries = computed(() => entries.value.length > 0)
                     </option>
                   </select>
                 </label>
-                <label class="block">
+                <label class="block min-w-0">
                   <span class="text-xs font-semibold uppercase text-ink-mute">下载模式</span>
                   <div class="mt-1 flex gap-1 rounded-full border-2 border-ink bg-white p-1 shadow-sticker-sm">
                     <button
                       v-for="m in modes"
                       :key="m.value"
                       type="button"
-                      class="flex-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors"
+                      class="flex-1 rounded-full px-2 py-1.5 text-[11px] font-semibold transition-colors sm:text-xs"
                       :class="entry.mode === m.value ? 'bg-brand text-white' : 'text-ink-soft hover:text-ink'"
                       :title="m.hint"
                       @click="entry.mode = m.value"
@@ -502,14 +508,32 @@ const hasEntries = computed(() => entries.value.length > 0)
               </div>
 
               <p v-if="entry.parse.subtitles.length" class="text-xs text-ink-mute">
-                检测到 {{ entry.parse.subtitles.length }} 种字幕；可用下方「AI 学习助手」做摘要与导图。批量下载字幕合并仍为后续会员能力。
+                检测到 {{ entry.parse.subtitles.length }} 种字幕；右侧可切换摘要、字幕、导图与问答。批量下载字幕合并仍为后续会员能力。
               </p>
-              <VideoSummary
-                :task-id="entry.parse.task_id"
-                :subtitle-options="entry.parse.subtitles"
-                :video-title="entry.parse.metadata.title ?? undefined"
-              />
             </template>
+          </div>
+
+          <div
+            class="min-h-[240px] w-full min-w-0 flex-1 lg:sticky lg:top-24 lg:max-h-[min(90vh,56rem)] lg:overflow-y-auto"
+          >
+            <VideoSummary
+              v-if="entry.parse"
+              :task-id="entry.parse.task_id"
+              :subtitle-options="entry.parse.subtitles"
+              :video-title="entry.parse.metadata.title ?? undefined"
+              :default-open="true"
+              :auto-summarize="true"
+              embedded
+            />
+            <div
+              v-else
+              class="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-ink/[0.03] p-6 text-center"
+            >
+              <p class="text-sm font-semibold text-ink-soft">AI 摘要区域</p>
+              <p class="max-w-sm text-xs text-ink-mute">
+                解析完成后将在此显示 AI 面板，并自动生成摘要总结。
+              </p>
+            </div>
           </div>
         </div>
       </article>
