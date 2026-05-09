@@ -16,6 +16,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .settings import settings
 from .routes import router as api_router
 from .ai_routes import router as ai_router
+from .auth_routes import router as auth_router
+from .billing_routes import router as billing_router
+from .webhook_routes import router as webhook_router
 from .task_store import task_store
 from .ytdlp_service import sweep_orphan_downloads
 
@@ -56,13 +59,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins or ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = list(settings.cors_origins) if settings.cors_origins else []
+if not _cors_origins:
+    # Empty list + credentials=True is invalid in the CORS spec; degrade to credentials-less wildcard.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -91,6 +105,9 @@ async def handle_validation_exc(_, exc: RequestValidationError) -> JSONResponse:
 
 app.include_router(api_router)
 app.include_router(ai_router)
+app.include_router(auth_router)
+app.include_router(billing_router)
+app.include_router(webhook_router)
 
 
 @app.get("/")

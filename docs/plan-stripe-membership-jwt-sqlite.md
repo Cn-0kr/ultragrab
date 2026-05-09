@@ -4,11 +4,13 @@
 
 ## 实现待办（跟踪用）
 
-- [ ] 新增 SQLite 初始化与 models：users / subscriptions / stripe_events + 索引与 Repository 封装
-- [ ] 实现 register / login / me、bcrypt、JWT、FastAPI Bearer 依赖与 `/api/auth` 路由
-- [ ] settings 环境变量；stripe checkout + customer 复用；raw body Webhook verify + 事件处理 + `event.id` 幂等
-- [ ] 登录注册页；`client.ts` Bearer；`PricingTeaser` 结账跳转；可选 success 轮询 me
-- [ ] `backend/.env.example` 与前端说明；`docs/design` + `changelog`；本地 Stripe CLI 联调清单
+- [x] 新增 SQLite 初始化与 models：users / subscriptions / stripe_events + 索引与 Repository 封装 — `backend/app/db.py`（v0.7.0）
+- [x] 实现 register / login / me、bcrypt、JWT、FastAPI Bearer 依赖与 `/api/auth` 路由 — `backend/app/security.py` + `auth_routes.py`（v0.7.0）
+- [x] settings 环境变量；stripe checkout + customer 复用；raw body Webhook verify + 事件处理 + `event.id` 幂等 — `settings.py` + `billing_routes.py` + `webhook_routes.py`（v0.7.0）
+- [x] 登录注册页；`client.ts` Bearer；`PricingTeaser` 结账跳转；成功页轮询 me（v0.7.1）
+- [x] `backend/.env.example` 与前端说明；`docs/design` + `changelog`；本地 Stripe CLI 联调清单 — `.env.example` + `docs/stripe-impl-report.md` + `changelog.md`（v0.7.0）
+
+> 关联交付报告：[`docs/stripe-impl-report.md`](./stripe-impl-report.md)。前端闭环与 Webhook 联机修复见 **v0.7.1**（`docs/changelog.md`）。前端价格已同步为 ¥12/月；CORS bug（`allow_origins=[] or ["*"]` + `credentials=True`）一并修复。
 
 ---
 

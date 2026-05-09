@@ -1,12 +1,40 @@
-import type {
+import {
+  CheckoutResponse,
   DownloadMode,
   DownloadResponse,
   ErrorPayload,
+  MeResponse,
   ParseResult,
   TaskView,
+  TokenResponse,
 } from './types'
+import { API_PREFIX } from './config'
 
-const API_BASE = '/api'
+const TOKEN_STORAGE_KEY = 'ultragrab_access_token'
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setToken(token: string) {
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function clearToken() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
 
 export class ApiError extends Error {
   code: string
@@ -20,10 +48,21 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+type RequestOpts = RequestInit & { auth?: boolean }
+
+async function request<T>(path: string, init?: RequestOpts): Promise<T> {
+  const headers = new Headers(init?.headers)
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (init?.auth) {
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const resp = await fetch(`${API_PREFIX}${path}`, {
     ...init,
+    headers,
   })
   if (!resp.ok) {
     let payload: ErrorPayload = { code: 'network_error', message: `HTTP ${resp.status}` }
@@ -31,7 +70,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await resp.json()
       if (body?.error) payload = body.error
     } catch {
-      // swallow — use default payload
+      // use default payload
+    }
+    if (init?.auth && resp.status === 401) {
+      clearToken()
     }
     throw new ApiError(payload, resp.status)
   }
@@ -60,8 +102,30 @@ export const api = {
     }),
 
   task: (task_id: string) => request<TaskView>(`/tasks/${encodeURIComponent(task_id)}`),
+
+  register: (params: { email: string; password: string }) =>
+    request<TokenResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  login: (params: { email: string; password: string }) =>
+    request<TokenResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  me: () => request<MeResponse>('/auth/me', { method: 'GET', auth: true }),
+
+  /** 创建 Stripe Checkout 会话；需已登录。成功返回 hosted checkout URL（应整页跳转）。 */
+  createCheckout: () =>
+    request<CheckoutResponse>('/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      auth: true,
+    }),
 }
 
 export function fileUrl(task_id: string): string {
-  return `${API_BASE}/files/${encodeURIComponent(task_id)}`
+  return `${API_PREFIX}/files/${encodeURIComponent(task_id)}`
 }

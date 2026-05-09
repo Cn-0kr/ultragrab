@@ -1,27 +1,29 @@
 <script setup lang="ts">
-import Hero from './components/Hero.vue'
-import DownloadWorkbench from './components/DownloadWorkbench.vue'
-import PricingTeaser from './components/PricingTeaser.vue'
-import FAQ from './components/FAQ.vue'
-import Footer from './components/Footer.vue'
+import { provide, ref, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import TopNav from './components/TopNav.vue'
-import { ref } from 'vue'
+import Footer from './components/Footer.vue'
 
-const workbenchRef = ref<InstanceType<typeof DownloadWorkbench> | null>(null)
+const router = useRouter()
+const workbenchFocusRef = ref<(() => void) | null>(null)
+provide('workbenchFocusRef', workbenchFocusRef)
 
-function focusInput() {
-  workbenchRef.value?.focusInput()
+async function onCta() {
+  const fn = workbenchFocusRef.value
+  if (fn) fn()
+  else {
+    await router.push({ name: 'home' })
+    await nextTick()
+    workbenchFocusRef.value?.()
+  }
 }
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
-    <TopNav @cta="focusInput" />
+  <div class="flex min-h-screen flex-col">
+    <TopNav @cta="onCta" />
     <main class="flex-1">
-      <Hero @cta="focusInput" />
-      <DownloadWorkbench ref="workbenchRef" />
-      <PricingTeaser />
-      <FAQ />
+      <RouterView />
     </main>
     <Footer />
   </div>

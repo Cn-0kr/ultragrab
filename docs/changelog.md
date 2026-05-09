@@ -2,6 +2,67 @@
 
 > 每完成一个阶段必须回写本文件：做了什么、验证了什么、已知限制。
 
+## 0.7.1 — 2026-05-09（会员前端闭环 + Webhook 联机修复 + 测试）
+
+### 新增 / 改进
+
+- **前端（Vue 4）**：`vue-router@4`；`RouterView` 壳层；视图 `views/HomeView.vue`、`LoginView.vue`、`RegisterView.vue`、`BillingSuccessView.vue`；`router/index.ts`；`utils/authRedirect.ts`（`next` 回跳）；`composables/useAuth.ts`。
+- **API 客户端**：`frontend/src/api/config.ts`（`VITE_API_BASE` 与 `/api` 前缀）；`client.ts` 增补 `register/login/me/createCheckout`、`getToken/setToken/clearToken`、Bearer + 401 清 token；`videoAi.ts` 与下载共用 `API_PREFIX`。
+- **定价与导航**：`PricingTeaser.vue` 实接 `POST /api/billing/checkout`、未登录跳转登录、已是 Pro 展示态；`TopNav.vue` RouterLink、登录/退出、Pro 皇冠与徽章样式。
+- **成功页**：`/billing/success` 轮询 `/api/auth/me`；超时提示 Webhook/`whsec` 自检；`session_id` 折叠展示。
+- **配置**：`frontend/.env.example` 增加 `VITE_API_BASE` 说明；`backend/.env.example` 强调 **CLI `whsec` 与 Dashboard 端点密钥不可混用**、系统环境变量残留时依赖 `.env override`。
+- **Stripe Settings**：`load_dotenv(..., override=True)`，避免本机/Conda 旧 `STRIPE_WEBHOOK_SECRET` 覆盖 `.env`；`_env_stripe_value()` 去除 BOM/外层引号。
+- **Webhook（`webhook_routes.py`）**：
+  - **幂等**：先 `has_stripe_event`，业务成功后 `remember_event`（避免先记事件再 500 导致重试被误 dedupe）。
+  - **StripeObject**：`event["data"]["object"]` 经 `_event_data_object`→`_as_dict`；`_as_dict` **优先 `to_dict()`**，禁止对 `Subscription` 使用 `dict(sub)`（会 `KeyError: 0`）。
+  - **展开字段**：`subscription` / `customer` / `items[].price` 兼容字符串与 `{id: ...}`（`_stripe_id`、`_line_item_price_id`）。
+  - 事件 **`invoice.payment_succeeded`** 与 `invoice.paid` 同路径处理。
+- **DB**：`has_stripe_event`；`remember_event` 仅插入、在处理成功后调用。
+- **测试**：`backend/tests/test_stripe_webhook.py`（dotenv override、`construct_event` 本地签名、`Subscription`→`_as_dict` 回归）。
+
+### 验证（2026-05-09）
+
+- `frontend`：`vue-tsc --noEmit`、`vite build` 通过。
+- `backend`：`pytest tests/test_stripe_webhook.py` 通过；Stripe CLI + Test Mode：`stripe listen` 转发后关键事件 **`[200]`**，`/api/auth/me` 在支付完成后 `has_active_subscription: true`。
+
+### 已知限制 / 运维提示
+
+- 开发库若曾在旧逻辑下写入 **`stripe_events` 且无订阅行**，可能 dedupe 跳过；可清空 `stripe_events` 或在 Stripe **Resend** 事件。
+- `pytest` 未列入 `requirements.txt`；本地可 `pip install pytest` 后运行上述测试。
+
+---
+
+## 0.7.0 — 2026-05-09（Stripe 会员后端：SQLite + JWT + Checkout + Webhook）
+
+### 新增 / 改进
+
+- **数据层**：新增 [`backend/app/db.py`](../backend/app/db.py)（SQLite，表 `users` / `subscriptions` / `stripe_events` + 索引 + Repository API）；首次访问自动建表；连接 context manager 统一 commit/rollback。
+- **认证**：新增 [`backend/app/security.py`](../backend/app/security.py)（`passlib[bcrypt]` 哈希 + `PyJWT` HS256）与 [`backend/app/auth_routes.py`](../backend/app/auth_routes.py)：
+  - `POST /api/auth/register`（邮箱+密码 ≥8 位，并发场景 `IntegrityError → 409`）
+  - `POST /api/auth/login`（密码错误统一返回 401 `invalid_credentials`，不区分用户存在与否）
+  - `GET /api/auth/me`（Bearer 鉴权，返回当前订阅快照）
+- **计费**：新增 [`backend/app/billing_routes.py`](../backend/app/billing_routes.py)：
+  - `POST /api/billing/checkout`（Bearer 鉴权；已有 active/trialing 订阅 → 409 `already_subscribed`；自动复用 / 创建 Stripe `Customer`；`client_reference_id` + `metadata.user_id` 双通道归并）。
+- **Webhook**：新增 [`backend/app/webhook_routes.py`](../backend/app/webhook_routes.py)：raw body + `stripe.Webhook.construct_event` 签名校验，`stripe_events` 表幂等；当前处理 `checkout.session.completed` / `customer.subscription.{created,updated,deleted}` / `invoice.{paid,payment_failed}`。
+- **配置**：`backend/app/settings.py` 增补 `jwt_secret/jwt_expires_seconds/stripe_secret_key/stripe_webhook_secret/stripe_price_pro_monthly/public_frontend_origin/billing_db_path`；`backend/.env.example` 同步注释模板（不含真实密钥）。
+- **依赖**：`backend/requirements.txt` 新增 `stripe>=11.0.0`、`PyJWT>=2.9.0`、`passlib[bcrypt]>=1.7.4`、`email-validator>=2.2.0`。
+- **CORS bug 修复**：`backend/app/main.py` 旧逻辑 `allow_origins=settings.cors_origins or ["*"]` + `allow_credentials=True`，在空列表时退化为「通配符 + credentials」会被浏览器拒绝；改为分支处理（空列表 → 关闭 credentials；非空 → 显式列表 + credentials）。
+- **价格对齐**：`frontend/src/components/PricingTeaser.vue` 由 `¥39/月（划线 ¥78）` 改为 `¥12/月`，与 Stripe 计划与 Dashboard 保持一致。
+- **文档**：新增 [`docs/stripe-impl-report.md`](./stripe-impl-report.md)（落地报告 + Stripe Dashboard 配置 + 本地联调脚本 + 剩余前端工作清单）；更新 [`docs/plan-stripe-membership-jwt-sqlite.md`](./plan-stripe-membership-jwt-sqlite.md) 待办勾选状态。
+
+### 待办（下一迭代：Customer Portal + 限流）
+
+- 后端：`POST /api/billing/portal`（Customer Portal），注册/登录速率限制。
+- 将会员能力与下载/AI 接口按 JWT 或订阅状态门禁（若产品需要）。
+
+### 已知限制
+
+- 当前未实现 Magic Link、密码找回、邮箱验证；MVP 直接 bcrypt 密码登录。
+- Webhook 处理失败抛 500，依赖 Stripe 自动重试；本地 `stripe listen` 重启会更换 `whsec_`，需要同步更新 `.env` 后重启 FastAPI。
+- SQLite 在单机部署够用；多实例横向扩展需迁移到 Postgres（后续）。
+
+---
+
 ## 0.6.0 — 2026-05-08（工作台同屏：Flex 分栏 + 解析后自动摘要）
 
 ### 新增 / 改进

@@ -1,3 +1,5 @@
+import { API_PREFIX } from './config'
+
 export interface TranscriptCue {
   start_ms: number
   end_ms: number
@@ -33,10 +35,7 @@ export class VideoAiError extends Error {
   }
 }
 
-const API_BASE = '/api'
-
 function normalizeHint(raw: unknown): string | null {
-  if (raw == null) return null
   if (typeof raw === 'string') return raw
   if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
   try {
@@ -66,7 +65,7 @@ export async function postTranscript(
   taskId: string,
   subtitleLangs?: string[],
 ): Promise<TranscriptResponse> {
-  const resp = await fetch(`${API_BASE}/transcript`, {
+  const resp = await fetch(`${API_PREFIX}/transcript`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task_id: taskId, subtitle_langs: subtitleLangs }),
@@ -76,7 +75,7 @@ export async function postTranscript(
 }
 
 export async function postMindmap(taskId: string, subtitleLangs?: string[]): Promise<MindmapResponse> {
-  const resp = await fetch(`${API_BASE}/mindmap`, {
+  const resp = await fetch(`${API_PREFIX}/mindmap`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task_id: taskId, subtitle_langs: subtitleLangs }),
@@ -96,7 +95,7 @@ export async function streamOpenAiSse(
   onDelta: (fullText: string, delta: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const resp = await fetch(`${API_BASE}${path}`, {
+  const resp = await fetch(`${API_PREFIX}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(body),

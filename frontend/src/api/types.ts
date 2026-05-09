@@ -64,3 +64,28 @@ export interface TaskView {
   metadata?: VideoMetadata | null
   error?: ErrorPayload | null
 }
+
+/** Auth / Stripe（与 backend billing_schemas 对齐） */
+export interface SubscriptionView {
+  status: string
+  current_period_end?: number | null
+  cancel_at_period_end: boolean
+  stripe_price_id?: string | null
+}
+
+export interface MeResponse {
+  id: string
+  email: string
+  has_active_subscription: boolean
+  subscription?: SubscriptionView | null
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface CheckoutResponse {
+  url: string
+}
